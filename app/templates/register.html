@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block main %}
+ <h1>Contact Form</h1>
+ </br>
+ <hr>
+ Register.<br><br>
+
+<form action="{{url_for('register')}}" method="POST">
+ {{form.csrf_token}}
+
+
+ <div class="form-group">
+ <label for="Username"><h5>{{ form.username.label }}<font color=#BA2C48>(Required)</font></h5>
+ username.
+</label>
+<br>
+ {{ form.username(class="form-control") }}
+</div><br><br>
+
+ <div class="form-group">
+ <label for="Password"><h5>{{ form.password.label }}<font color=#BA2C48>(Required)</font></h5>
+ password.
+</label>
+<br>
+ {{ form.password(class="form-control") }}
+</div><br><br>
+
+ <div class="form-group">
+ <label for="Firstname"><h5>{{ form.firstname.label }}<font color=#BA2C48>(Required)</font></h5>
+ firstname.
+</label>
+<br>
+ {{ form.firstname(class="form-control") }}
+</div><br><br>
+
+ <div class="form-group">
+ <label for="Lastname"><h5>{{ form.lastname.label }}<font color=#BA2C48>(Required)</font></h5>
+ lastname.
+</label>
+<br>
+ {{ form.lastname(class="form-control") }}
+</div><br><br>
+
+<div class="form-group">
+<label for="Email"><h5>{{ form.email.label }}<font color=#BA2C48>(Required)</font></h5>
+Please enter your e-mail address.
+</label>
+<br>
+{{ form.email(class="form-control") }}
+</div><br><br>
+
+
+<div class="form-group">
+<label for="Location"><h5>{{ form.location.label }}<font color=#BA2C48>(Required)</font></h5>
+location.
+</label>
+<br>
+{{ form.location(class="form-control") }}
+</div><br><br>
+
+
+<div class="form-group">
+<label for="Biography"><h5>{{ form.bio.label }}<font color=#BA2C48>(Required)</font></h5>
+biography
+</label>
+<br>
+{{ form.bio(class="form-control", rows="6") }}
+</div><br><br>
+
+<div class="form-group">
+<label for="Photo"><h5>{{ form.photo.label }}</h5>
+No file selected
+</label>
+<br>
+{{ form.photo(class="form-control", rows="6") }}
+</div><br><br>
+
+
+
+<button id= "butn" type="Register">Send
+</button>
+</form>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block main %}
+<h1 class="page-header">User Profile</h1>
+
+<div class="grid-container">
+   {% for file in files %}
+
+  <div class="grid-item">
+   <img src="{{ url_for('static', filename="uploads/" + file) }}" />
+   </div>
+
+    {% endfor %}
+</div>
+
+{% endblock %}

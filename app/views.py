@@ -4,12 +4,29 @@ Jinja2 Documentation:    http://jinja.pocoo.org/2/documentation/
 Werkzeug Documentation:  http://werkzeug.pocoo.org/documentation/
 This file creates your application.
 """
+from app import app, db, login_manager
+from flask import render_template, request, redirect, url_for, flash
+from flask_login import login_user, logout_user, current_user, login_required
+from werkzeug.security import check_password_hash
 
-from app import app
-from flask import render_template, request
+import datetime
+
+from app.forms import Register
+from app.forms import Login
+from app.forms import Post 
+
+from app.models import UserProfile
+from app.models import UserPost 
+from app.models import UserLikes
+from app.models import UserFollows
+
+from werkzeug.utils import secure_filename
+from flask import jsonify
+import os
+
 
 ###
-# Routing for your application.
+# Routing for your applpython3.5 -m venv venv ication.
 ###
 
 
@@ -49,6 +66,9 @@ def form_errors(form):
 # The functions below should be applicable to all Flask apps.
 ###
 
+def format_date_joined(jdate):
+    
+    return  jdate.strftime("%B, %Y")
 
 @app.route('/<file_name>.txt')
 def send_text_file(file_name):
@@ -73,7 +93,84 @@ def add_header(response):
 def page_not_found(error):
     """Custom 404 page."""
     return render_template('404.html'), 404
+    
+    
 
+@app.route('/api/users/register', method = ['POST'])
+def register():
+    form = Register()
+    if request.method == 'POST':
+        if form.validate_on_submit():
+            
+            user = form.username.data
+            password = form.password.data
+            firstname = form.firstname.data
+            lastname = form.lastname.data
+            email = form.email.data
+            location = form.location.data
+            biography = form.biography.data
+            photo = form.photo.data
+            filename = secure_filename(photo.filename)
+            photo.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            x  = datetime.datetime.now()
+            date = x.strftime("%x")
+            #user = UserProfile(id = id, username= user,password=password, firstname=firstname, last_name = lastname, email= email, location = location,biography=biography, joined_on = date ,photo = filename)
+            user = UserProfile(username= user, password= password, first_name = firstname, last_name = lastname, emal= email, location = location, bio = biography, photo = filename)
+            db.session.add(user)
+            db.session.commit()
+            return(redirect "/registered")
+
+
+@app.route('/api/users/{user_id}/posts', method=["POST"])
+def posts():
+    if current_user.is_authenticated:
+        return render_template('posts.html')
+
+@app.route('/api/auth/login', method=["POST"])
+def login():
+    if current_user.is_authenticated:
+        return render_template('posts.html')
+    form = Login()
+    if request.method == "POST" and form.validate_on_submit():
+        # change this to actually validate the entire form submission
+        # and not just one field
+        username=form.username.data
+        password=form.password.data
+        
+        user = UserProfile.query.filter_by(username=username).first()
+        print(user)
+        flash(user.first_name)
+        
+        if user is not None and check_password_hash(user.password, password ):
+            print("logged")
+            login_user(user)
+            return redirect(url_for('posts'))
+
+
+        else:
+            flash('Username or Password is incorrect.', 'danger')
+            flash_errors(form)
+            return render_template('login.html', form=form)
+        flash('Logged in successfully.', 'success')
+        return render_template('posts.html')
+       
+    else:
+        flash('Username or Password is incorrect.', 'danger')
+        flash_errors(form)
+        return render_template('login.html', form=form)
+
+@app.route('/api/auth/logout', method = ['GET'] )
+@login_required
+def logout():
+    # Logout the user and end the session
+    logout_user()
+    flash('You have been logged out.', 'Retry')
+    return render_template('home.html')
+
+@login_manager.user_loader
+def load_user(id):
+    return UserProfile.query.get(int(id))
+    
 
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0", port="8080")
