@@ -171,8 +171,7 @@ const Login = Vue.component('login',{
 
 const Logout = Vue.component('logout',{
     template:`
-    <div class="exiter">
-        <h3>Logging out...</h3>
+    <div>
     </div>
     `,
     methods: {
