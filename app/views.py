@@ -4,78 +4,237 @@ Jinja2 Documentation:    http://jinja.pocoo.org/2/documentation/
 Werkzeug Documentation:  http://werkzeug.pocoo.org/documentation/
 This file creates your application.
 """
-from app import app, db, login_manager
-from flask import render_template, request, redirect, url_for, flash
-from flask_login import login_user, logout_user, current_user, login_required
+
+from app import app, db
+from flask import render_template, request, redirect, url_for, jsonify
 from werkzeug.security import check_password_hash
-
-import datetime
-
-from app.forms import Register
-from app.forms import Login
-from app.forms import Post 
-
-from app.models import UserProfile
-from app.models import UserPost 
-from app.models import UserLikes
-from app.models import UserFollows
-
 from werkzeug.utils import secure_filename
-from flask import jsonify
-import os
+from forms import *
+from models import *
+import os, datetime
+import jwt
+from functools import wraps
 
 
 ###
-# Routing for your applpython3.5 -m venv venv ication.
+# Routing for your application.
 ###
 
 
-# Please create all new routes and view functions above this route.
-# This route is now our catch all route for our VueJS single page
-# application.
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def index(path):
-    """
-    Because we use HTML5 history mode in vue-router we need to configure our
-    web server to redirect all routes to index.html. Hence the additional route
-    "/<path:path".
-
-    Also we will render the initial webpage and then let VueJS take control.
-    """
+@app.route('/')
+def home():
+    """Render website's home page."""
     return render_template('index.html')
+    
+def token_authenticate(t):
+    @wraps(t)
+    def decorated(*args, **kwargs):
+        
+        auth = request.headers.get('Authorization', None)
+        
+        if not auth:
+            return jsonify({'error': 'Access Denied : No Token Found'}), 401
+        else:
+            try:
+                userdata = jwt.decode(auth.split(" ")[1], app.config['SECRET_KEY'])
+                currentUser = Users.query.filter_by(username = userdata['user']).first()
+                
+                if currentUser is None:
+                    return jsonify({'error': 'Access Denied'}), 401
+                
+            except jwt.exceptions.InvalidSignatureError as e:
+                print e
+                return jsonify({'error':'Invalid Token'})
+            except jwt.exceptions.DecodeError as e:
+                print e
+                return jsonify({'error': 'Invalid Token'})
+            return t(*args, **kwargs)
+    return decorated
+    
+
+@app.route('/api/users/register',methods=["POST"])
+def register():
+    form = RegistrationForm()
+    
+    if request.method=='POST' and form.validate_on_submit():
+        
+        try:
+            uname = form.username.data
+            pword = form.password.data
+            location=form.location.data
+            bio=form.biography.data
+            lname=form.lastname.data
+            fname=form.firstname.data
+            mail=form.email.data
+            photo = form.photo.data
+            date = str(datetime.date.today())
+            filename = uname+secure_filename(photo.filename)
+            
+            user = Users(username=uname, password=pword, first_name=fname, last_name=lname, email=mail, location=location, biography=bio, profile_photo=filename, joined_on=date)
+            photo.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            db.session.add(user)
+            db.session.commit()
+            
+            return jsonify(message = "User successfully registered")
+            
+            
+        except Exception as e:
+            db.session.rollback()
+            print e
+            return jsonify(errors=["Internal Error"])
+    
+    return jsonify(errors=form_errors(form))
+    
+
+@app.route('/api/auth/login',methods=["POST"])
+def login():
+    form = LoginForm()
+    
+    if request.method == "POST" and form.validate_on_submit():
+        username = form.username.data
+        password = form.password.data
+        
+        user = Users.query.filter_by(username=username).first()
+        
+        if user != None and check_password_hash(user.password, password):
+            payload = {'user': user.username}
+            jwt_token = jwt.encode(payload,app.config['SECRET_KEY'],algorithm = "HS256")
+            response = {'message': 'User successfully logged in','token':jwt_token, "user_id": user.id}
+            
+            return jsonify(response)
+            
+        return jsonify(errors="Username or password is incorrect")
+    
+    return jsonify(errors=form_errors(form))
 
 
-# Here we define a function to collect form errors from Flask-WTF
-# which we can later use
+@app.route('/api/auth/logout', methods = ['GET'])
+@token_authenticate
+def logout():
+    return jsonify(message= "User successfully logged out.")
+    
+        
+@app.route('/api/posts', methods = ['GET'])
+@token_authenticate
+def viewPosts():
+    allPosts = Posts.query.all()
+    posts = []
+    
+    
+    for post in allPosts:
+        user = Users.query.filter_by(id=post.user_id).first()
+
+        likeCount = len(Likes.query.filter_by(post_id=post.id).all())
+        postObj = {"id": post.id, "user_id": post.user_id, "username": user.username, "user_profile_photo": os.path.join(app.config['UPLOAD_FOLDER'],user.profile_photo),"photo": os.path.join(app.config['UPLOAD_FOLDER'],post.photo), "caption": post.caption, "created_on": strf_time(post.created_on, "%d %B %Y"), "likes": likeCount}
+        posts.append(postObj)
+        
+    return jsonify(posts=posts)
+    
+    
+    
+@app.route('/api/users/<user_id>/posts', methods =['GET','POST'])
+@token_authenticate
+def posts(user_id):
+    
+    if request.method == 'GET':
+        posts = Posts.query.filter_by(user_id = user_id).all()
+        
+        user = Users.query.filter_by(id=user_id).first()
+        user_follower_count = len(Follows.query.filter_by(user_id=user.id).all())
+        response = {"status": "ok", "post_data":{"firstname":user.first_name, "lastname": user.last_name, "location": user.location, "joined_on": "Member since "+strf_time(user.joined_on, "%B %Y"), "bio": user.biography, "postCount": len(posts), "followers": user_follower_count, "profile_image": os.path.join(app.config['UPLOAD_FOLDER'],user.profile_photo), "posts":[]}}
+        
+        for post in posts:
+            postObj = {"id":post.id, "user_id": post.user_id, "photo": os.path.join(app.config['UPLOAD_FOLDER'], post.photo), "caption": post.caption, "created_on": post.created_on}
+            response["post_data"]["posts"].append(postObj)
+        
+        return jsonify(response)
+    
+    
+    if request.method == 'POST':
+        
+        form = PostForm()
+        
+        if form.validate_on_submit():
+            
+            u_id = form.user_id.data
+            photo = form.photo.data
+            captn = form.caption.data
+            
+            user = Users.query.filter_by(id=u_id).first()
+            
+            filename = user.username+secure_filename(photo.filename)
+            
+            create_date = str(datetime.date.today())
+            post = Posts(user_id=u_id,photo=filename,caption=captn ,created_on=create_date)
+            photo.save(os.path.join("./app", app.config['UPLOAD_FOLDER'],filename))
+            db.session.add(post)
+            db.session.commit()
+            return jsonify(status=201, message="Post Created")
+            
+            
+        print form.errors.items()
+        return jsonify(status=200, errors=form_errors(form))
+
+@app.route('/api/users/<user_id>/follow', methods = ['POST'])
+@token_authenticate
+def follow(user_id):
+    
+    request_payload = request.get_json()
+    
+    result = Follows.query.filter_by(user_id = request_payload['user_id'], follower_id = request_payload['follower_id']).first()
+    
+    if result!= None:
+        return jsonify(status = 200, message="Unable to complete operation ")
+    
+    follow = Follows(user_id = request_payload['user_id'], follower_id = request_payload['follower_id'])
+    db.session.add(follow)
+    db.session.commit()
+    
+    return jsonify(status = 201, message="Operation successful")
+
+
+# Like Route
+@app.route('/api/posts/<post_id>/like',methods = ['POST'])
+@token_authenticate
+def like(post_id):
+    
+    request_payload = request.get_json()
+    user_id = request_payload["user_id"]
+    post_id = request_payload["post_id"]
+    
+    post = Posts.query.filter_by(id=post_id).first()
+    Postlikes = Likes.query.filter_by(post_id=post_id).all()
+    
+    if post is None:
+        return jsonify(staus="", message="Post does not exist")
+        
+    if Postlikes is not None:
+        for like in Postlikes:
+            if like.user_id == user_id:
+                return jsonify(status=200, message="already liked")
+        
+    NewLike = Likes(post_id = post_id, user_id = user_id)
+    
+    db.session.add(NewLike)
+    db.session.commit()
+    
+    total_likes = len(Likes.query.filter_by(post_id=post_id).all())
+    return jsonify({"status":201,'message': 'post liked','likes':total_likes})
+
+
+def strf_time(date, dateFormat):
+    return datetime.date(int(date.split('-')[0]),int(date.split('-')[1]),int(date.split('-')[2])).strftime(dateFormat)
+
+# errors from the form if validation fails
 def form_errors(form):
-    error_messages = []
-    """Collects form errors"""
+    
+    errorArr = []
+    
     for field, errors in form.errors.items():
         for error in errors:
-            message = u"Error in the %s field - %s" % (
-                    getattr(form, field).label.text,
-                    error
-                )
-            error_messages.append(message)
-
-    return error_messages
-
-
-###
-# The functions below should be applicable to all Flask apps.
-###
-
-def format_date_joined(jdate):
-    
-    return  jdate.strftime("%B, %Y")
-
-@app.route('/<file_name>.txt')
-def send_text_file(file_name):
-    """Send your static text file."""
-    file_dot_text = file_name + '.txt'
-    return app.send_static_file(file_dot_text)
-
+            errorArr.append(error)
+            
+    return errorArr
 
 @app.after_request
 def add_header(response):
@@ -93,84 +252,7 @@ def add_header(response):
 def page_not_found(error):
     """Custom 404 page."""
     return render_template('404.html'), 404
-    
-    
 
-@app.route('/api/users/register', method = ['POST'])
-def register():
-    form = Register()
-    if request.method == 'POST':
-        if form.validate_on_submit():
-            
-            user = form.username.data
-            password = form.password.data
-            firstname = form.firstname.data
-            lastname = form.lastname.data
-            email = form.email.data
-            location = form.location.data
-            biography = form.biography.data
-            photo = form.photo.data
-            filename = secure_filename(photo.filename)
-            photo.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            x  = datetime.datetime.now()
-            date = x.strftime("%x")
-            #user = UserProfile(id = id, username= user,password=password, firstname=firstname, last_name = lastname, email= email, location = location,biography=biography, joined_on = date ,photo = filename)
-            user = UserProfile(username= user, password= password, first_name = firstname, last_name = lastname, emal= email, location = location, bio = biography, photo = filename)
-            db.session.add(user)
-            db.session.commit()
-            return(redirect "/registered")
-
-
-@app.route('/api/users/{user_id}/posts', method=["POST"])
-def posts():
-    if current_user.is_authenticated:
-        return render_template('posts.html')
-
-@app.route('/api/auth/login', method=["POST"])
-def login():
-    if current_user.is_authenticated:
-        return render_template('posts.html')
-    form = Login()
-    if request.method == "POST" and form.validate_on_submit():
-        # change this to actually validate the entire form submission
-        # and not just one field
-        username=form.username.data
-        password=form.password.data
-        
-        user = UserProfile.query.filter_by(username=username).first()
-        print(user)
-        flash(user.first_name)
-        
-        if user is not None and check_password_hash(user.password, password ):
-            print("logged")
-            login_user(user)
-            return redirect(url_for('posts'))
-
-
-        else:
-            flash('Username or Password is incorrect.', 'danger')
-            flash_errors(form)
-            return render_template('login.html', form=form)
-        flash('Logged in successfully.', 'success')
-        return render_template('posts.html')
-       
-    else:
-        flash('Username or Password is incorrect.', 'danger')
-        flash_errors(form)
-        return render_template('login.html', form=form)
-
-@app.route('/api/auth/logout', method = ['GET'] )
-@login_required
-def logout():
-    # Logout the user and end the session
-    logout_user()
-    flash('You have been logged out.', 'Retry')
-    return render_template('home.html')
-
-@login_manager.user_loader
-def load_user(id):
-    return UserProfile.query.get(int(id))
-    
 
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0", port="8080")

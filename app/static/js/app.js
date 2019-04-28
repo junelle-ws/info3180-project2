@@ -81,7 +81,7 @@ const Register = Vue.component('register', {
             <label for="photo"><b>Profile Picture</b></label>
             <input type="file" name="pic" id="photo" required>
             
-            <button type=submit class="btn btn-primary" > Register </button>
+            <button @click="regForm" class="btn btn-primary mb-2" > Register </button>
         </form>
     </div>
    `,
@@ -133,7 +133,7 @@ const Login = Vue.component('login',{
             <label for="psw"><b>Password</b></label>
             <input type="password" placeholder="Enter Password" name="psw" required>
             
-            <button type=submit class="btn btn-primary"> Login </button>
+            <button @click="logForm" class="btn btn-primary"> Login </button>
         </form>
     </div>
    `,
@@ -310,7 +310,7 @@ const AddPost = Vue.component('addPost',{
                 <input type="file" name="photo" />
             </div>
             <br />
-            <button type="submit">Post</button>
+            <button class="btn btn-primary mb-2" @click="postForm">Post</button>
         </form>
     </div>
     `,
